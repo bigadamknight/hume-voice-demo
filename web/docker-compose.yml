@@ -1,0 +1,77 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hume
+      POSTGRES_PASSWORD: hume
+      POSTGRES_DB: hume_evi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hume"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql://hume:hume@db:5432/hume_evi?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      HUME_API_KEY: ${HUME_API_KEY}
+      HUME_CONFIG_ID: ${HUME_CONFIG_ID}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PORT: 8080
+      MEMGRAPH_URI: ${MEMGRAPH_URI:-bolt://memgraph:7687}
+      MEMGRAPH_USERNAME: ${MEMGRAPH_USERNAME:-}
+      MEMGRAPH_PASSWORD: ${MEMGRAPH_PASSWORD:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    depends_on:
+      db:
+        condition: service_healthy
+      memgraph:
+        condition: service_started
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  memgraph:
+    image: memgraph/memgraph:latest
+    ports:
+      - "7688:7687"  # Bolt protocol
+      - "7445:7444"  # Monitoring
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+    environment:
+      - MEMGRAPH_LOG_LEVEL=WARNING
+    command: ["--log-level=WARNING"]
+    healthcheck:
+      test: ["CMD", "mgconsole", "--execute", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  memgraph_data:
+

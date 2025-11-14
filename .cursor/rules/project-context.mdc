@@ -1,0 +1,169 @@
+---
+description: Core project context and architecture for David Bowie - Hume EVI Voice Conversation Platform
+alwaysApply: true
+---
+
+# David Bowie - Hume EVI Voice Conversation Platform
+
+## Project Overview
+
+This is a voice conversation platform using Hume's Empathic Voice Interface (EVI). It consists of:
+1. **CLI Application** (Python) - Original CLI for voice conversations
+2. **Web Application** (Go backend + React frontend) - Multi-user web interface with authentication
+
+## Architecture
+
+### CLI (Root Directory)
+- Python 3.9+ application
+- SQLite database (`conversations.db`)
+- Direct Hume EVI WebSocket connection
+- Commands: `start`, `resume`, `list`, `view`
+
+### Web Application (`web/` directory)
+- **Backend**: Go monolith (`web/backend/`)
+  - REST API for auth, conversations, messages
+  - WebSocket proxy to Hume EVI
+  - PostgreSQL database
+  - Memgraph integration for knowledge graphs
+- **Frontend**: React + TypeScript (`web/frontend/`)
+  - shadcn/ui components
+  - Vite build system
+  - Real-time voice chat with Hume EVI
+- **Deployment**: Docker Compose
+  - PostgreSQL 16
+  - Memgraph (Bolt protocol on port 7688)
+  - Nginx reverse proxy
+
+## Key Technical Concepts
+
+### Hume EVI Integration
+- Uses Hume TypeScript SDK (`@humeai/sdk`)
+- WebSocket connection to `wss://api.hume.ai/v0/evi/chat`
+- Authentication: API key passed to `client.empathicVoice.chat.connect({ apiKey })`
+- Audio: `EVIWebAudioPlayer` for playback, `MediaRecorder` for capture
+- Conversation resumption: Use `resumedChatGroupId` in connect options
+- Context injection: Send `session_settings` messages with context text
+
+### Context Injection System
+- External AI monitors conversations via `/api/analyze-conversation`
+- Returns `shouldIntervene`, `contextText`, `contextType` (temporary/persistent)
+- Frontend calls `injectContext()` to send context to EVI
+- Currently disabled in `VoiceChat.tsx` (commented out) - ready for AI integration
+
+### Knowledge Graph (Memgraph)
+- Stores entities and relationships extracted from conversations
+- LLM extracts graph structure (entities, relationships) from transcripts
+- Used for pattern recognition and intelligent context injection
+- See `docs/MEMGRAPH_INTEGRATION.md` and `docs/GRAPH_EXTRACTION_EXAMPLE.md`
+
+## Code Standards
+
+### Go Backend
+- Standard project layout: `cmd/server/`, `internal/`
+- Database migrations in `internal/db/migrations/`
+- API handlers in `internal/api/`
+- Use `github.com/gorilla/mux` for routing
+- JWT authentication middleware
+- PostgreSQL via `github.com/lib/pq`
+- Memgraph via Neo4j driver (`github.com/neo4j/neo4j-go-driver/v5`)
+
+### React Frontend
+- TypeScript strict mode
+- Functional components with hooks
+- shadcn/ui for components
+- Tailwind CSS for styling
+- API calls via `lib/api.ts`
+- Environment variables via Vite (`import.meta.env`)
+
+### Python CLI
+- SQLite for persistence
+- Hume Python SDK for WebSocket
+- Simple CLI with argparse
+
+## Important Files
+
+### Core Voice Chat
+- `web/frontend/src/components/VoiceChat.tsx` - Main EVI integration, audio handling, context injection hooks
+- `web/backend/internal/api/context_handler.go` - AI conversation analysis endpoint
+- `web/backend/internal/graph/` - Memgraph client and knowledge graph operations
+
+### Database
+- `web/backend/internal/db/migrations/001_initial.sql` - Schema (users, conversations, messages)
+- PostgreSQL: conversations and messages storage
+- Memgraph: knowledge graph storage
+
+### Configuration
+- `web/docker-compose.yml` - All services (db, backend, frontend, memgraph)
+- `web/frontend/vite.config.ts` - Frontend build config
+- `.env` files for secrets (not in repo)
+
+## Common Patterns
+
+### Conversation Flow
+1. User starts voice chat → Auto-creates conversation if none exists
+2. Messages saved to PostgreSQL in real-time
+3. After conversation, optionally sync to Memgraph for graph extraction
+4. Graph patterns used for future context injection
+
+### Audio Handling
+- Browser Web Audio API for capture/playback
+- Hume SDK helpers: `getAudioStream`, `convertBlobToBase64`, `getBrowserSupportedMimeType`
+- Echo cancellation handled by browser (no server-side processing needed)
+
+### Authentication
+- JWT tokens stored in httpOnly cookies
+- Protected routes require valid JWT
+- User-scoped data isolation (conversations, messages)
+
+## Development Workflow
+
+### Docker Development
+```bash
+cd web
+docker-compose up -d          # Start all services
+docker-compose logs -f        # View logs
+docker-compose exec db psql   # Access PostgreSQL
+docker-compose exec memgraph mgconsole  # Access Memgraph
+```
+
+### Frontend Development
+```bash
+cd web/frontend
+yarn install
+yarn dev  # Runs on port 5173
+```
+
+### Backend Development
+```bash
+cd web/backend
+go mod download
+go run cmd/server/main.go  # Runs on port 8080
+```
+
+## Important Notes
+
+- **Yarn, not NPM** - Use `yarn` for frontend package management
+- **No verbose .md reports** - Don't create progress report files
+- **GitHub Issues** - Always ask before creating/updating/closing issues
+- **Code quality** - Write production-ready code, no placeholders
+- **Stale bundles** - Hard refresh (Cmd+Shift+R) after Docker rebuilds
+- **WebSocket reconnection** - Uses `resumedChatGroupId` to maintain conversation context
+
+## Documentation
+
+- `docs/MEMGRAPH_INTEGRATION.md` - Memgraph setup and usage
+- `docs/GRAPH_EXTRACTION_EXAMPLE.md` - AI-powered graph extraction examples
+- `README.md` - CLI application docs
+- `web/README.md` - Web application docs
+
+## Environment Variables
+
+### Required
+- `HUME_API_KEY` - Hume API key
+- `HUME_CONFIG_ID` - EVI configuration ID
+- `JWT_SECRET` - Random secret for JWT signing
+- `DATABASE_URL` - PostgreSQL connection string
+
+### Optional
+- `MEMGRAPH_URI` - Memgraph connection (default: `bolt://memgraph:7687`)
+- `OPENAI_API_KEY` - For LLM-based graph extraction (not yet integrated)

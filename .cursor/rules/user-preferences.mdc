@@ -1,0 +1,405 @@
+---
+description: User preferences and coding standards for all projects - React hooks, pure components, structural patterns, and tech stack preferences
+alwaysApply: true
+---
+
+# User Preferences & Coding Standards
+
+## Technology Stack Preferences
+
+### Standard Stack
+- **Backend**: Go (1.21+) with Echo/Gin framework
+- **Frontend**: React 18+ with TypeScript (strict mode)
+- **Database**: PostgreSQL 16+
+- **Containerization**: Docker & Docker Compose
+- **Package Manager**: **Always use Yarn, never NPM**
+
+### Additional Tools
+- **ORM**: GORM for Go projects
+- **Migrations**: golang-migrate or GORM auto-migrate (dev/test)
+- **Type Generation**: SQLC → OpenAPI → TypeScript (keep types in sync)
+- **UI Libraries**: shadcn/ui, Material-UI, or Tailwind CSS
+- **Form Handling**: React Hook Form + Zod validation
+- **State Management**: TanStack Query (React Query) preferred for server state
+
+## React Architecture Patterns
+
+### Core Principles
+
+**1. Pages Orchestrate**
+- Pages call focused hooks to fetch/mutate data
+- Pages manage navigation and routing
+- Pages pass plain props to components
+- **Never make API calls directly in pages** - use hooks
+
+**2. Hooks Own Data Access**
+- One hook per use-case (query/mutation)
+- Cache, errors, side-effects live in hooks
+- Return `{ data, isLoading, error, ...actions }`
+- Use TanStack Query or encapsulate fetch+cache logic manually
+- **All API calls happen in hooks, never in components**
+
+**3. Components Are Pure**
+- **No fetching** - components receive data via props
+- **No routing** - navigation via callbacks
+- **No global state** - state comes from props
+- Input via props; output via callbacks
+- Components emit events like `onSubmit(form)`, `onSelect(id)`, etc.
+
+**4. Effects & Dependencies**
+- Avoid functions in `useEffect` dependency arrays
+- Prefer hook/event-driven flows over effects
+- If needed, memoize functions with `useCallback`
+- Keep effects small and deterministic
+
+### Directory Structure Pattern
+
+```
+frontend/src/
+├── pages/                    # Pages orchestrate
+│   ├── FeatureName/
+│   │   ├── index.tsx        # Page component with hooks
+│   │   └── useFeatureData.ts  # Custom hook for this page
+├── components/              # Pure components - no API calls
+│   ├── featurename/
+│   │   ├── FeatureList.tsx   # Props in, events out
+│   │   └── FeatureCard.tsx
+├── hooks/                  # Reusable hooks
+│   ├── api/               # API-specific hooks
+│   └── common/            # Non-API hooks
+├── services/              # API service layer
+└── types/                 # TypeScript types (GENERATED)
+```
+
+### Example Pattern
+
+```typescript
+// ✅ CORRECT: Page orchestrates
+const FeaturePage = () => {
+  const { data, isLoading, error, handlers } = useFeatureData();
+  
+  if (isLoading) return <Loading />;
+  if (error) return <Error error={error} />;
+  
+  return (
+    <FeatureList 
+      items={data} 
+      onSelect={handlers.select}
+      onDelete={handlers.delete}
+    />
+  );
+};
+
+// ✅ CORRECT: Hook owns data access
+const useFeatureData = () => {
+  const [data, setData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    fetchFeatureData().then(setData).finally(() => setIsLoading(false));
+  }, []);
+  
+  const handleSelect = useCallback((id: string) => {
+    // Handle selection
+  }, []);
+  
+  return { data, isLoading, handlers: { select: handleSelect } };
+};
+
+// ✅ CORRECT: Component is pure
+interface FeatureListProps {
+  items: Feature[];
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const FeatureList = ({ items, onSelect, onDelete }: FeatureListProps) => {
+  // No API calls, no business logic
+  return (
+    <div>
+      {items.map(item => (
+        <FeatureCard 
+          key={item.id} 
+          item={item}
+          onSelect={() => onSelect(item.id)}
+          onDelete={() => onDelete(item.id)}
+        />
+      ))}
+    </div>
+  );
+};
+```
+
+## React Memoization Guidelines
+
+### `useMemo` - When to Use
+- Computing expensive, pure derived data from props/state
+  - Filter/sort/aggregate large lists
+  - Build lookup maps
+- Must pass stable object/array to children or libraries
+  - Prevents avoidable re-renders
+  - Prevents cache misses
+- Building stable query keys/param objects for data hooks
+
+### `useMemo` - When to Avoid
+- Computation is cheap (don't micro-optimize)
+- No measured re-render issue
+- To model side-effects (wrong tool)
+- As a correctness guarantee (it's a performance hint, not business logic)
+
+### `useCallback` - For Functions
+- Memoize event handlers you pass to children
+- Prefer depending on plain values
+- **Don't put functions in `useEffect` deps** - use `useCallback` or refactor
+
+### `useRef` - For Mutable State
+- Keep mutable values that don't affect render
+- Examples: timeouts, previous values, DOM refs
+- Doesn't trigger re-renders
+
+### Memoization Patterns
+
+```typescript
+// ✅ Derived list
+const filtered = useMemo(() => 
+  items.filter(byQuery(q)), 
+  [items, q]
+);
+
+// ✅ Stable params
+const params = useMemo(() => ({
+  orgId, sort, limit
+}), [orgId, sort, limit]);
+
+// ✅ Stable handler
+const onSubmit = useCallback((form) => {
+  mutate(form);
+}, [mutate]);
+
+// ✅ Derive in hooks, return plain data
+const useFeatureData = () => {
+  const rawData = useQuery(...);
+  const processed = useMemo(() => 
+    transform(rawData), 
+    [rawData]
+  );
+  return processed; // Return plain data to pages/components
+};
+```
+
+## Backend Architecture Patterns
+
+### Layering
+
+**1. Handlers**
+- Decode/validate input
+- Call services
+- Map domain errors → HTTP status codes
+- **No database access** - use services
+
+**2. Services**
+- Business rules and invariants
+- Transactions (e.g., `WithTx(ctx, fn)`)
+- Orchestrate across repositories
+- **No direct DB access** - use repositories
+
+**3. Repositories**
+- **GORM-only** data access
+- Return domain structs
+- **No business logic**
+- No leaking GORM types above repo layer
+
+### Context Propagation
+- Context flows: handler → service → repository
+- Use for timeouts and cancellation
+- Always propagate `context.Context` through layers
+
+### Example Pattern
+
+```go
+// ✅ CORRECT: Handler is thin
+func (h *Handler) CreateResource(c *gin.Context) {
+    var req CreateResourceRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(400, gin.H{"error": err.Error()})
+        return
+    }
+    
+    resource, err := h.service.CreateResource(c.Request.Context(), req)
+    if err != nil {
+        c.JSON(500, gin.H{"error": err.Error()})
+        return
+    }
+    
+    c.JSON(201, resource)
+}
+
+// ✅ CORRECT: Service owns business logic
+func (s *Service) CreateResource(ctx context.Context, req CreateResourceRequest) (*Resource, error) {
+    return s.db.WithTx(ctx, func(tx *gorm.DB) error {
+        // Business rules here
+        return s.repo.Create(ctx, tx, resource)
+    })
+}
+
+// ✅ CORRECT: Repository is GORM-only
+func (r *Repository) Create(ctx context.Context, tx *gorm.DB, resource *Resource) error {
+    return tx.WithContext(ctx).Create(resource).Error
+}
+```
+
+## Type Safety & Synchronization
+
+### Type Flow Pipeline
+```
+PostgreSQL Schema (migrations/)
+    ↓ sqlc generate
+Go Models & Queries (internal/db/)
+    ↓ swag init
+OpenAPI Spec (docs/swagger.json)
+    ↓ openapi-typescript
+TypeScript Types (frontend/src/types/api.ts)
+```
+
+### Critical Rules
+1. **Database schema is single source of truth**
+2. **NEVER manually create duplicate types** - always generate
+3. **ALWAYS use SQLC generated methods in handlers** - no raw SQL
+4. **NEVER define types locally in components** - import from generated
+5. **ALWAYS run sync command after schema changes**
+
+### JSON Naming Conventions
+- **Database**: `snake_case` (PostgreSQL standard)
+- **API Contracts**: `camelCase` (JSON field names)
+- **Go Handlers**: `camelCase` JSON tags
+- **TypeScript**: `camelCase` property names
+
+## Code Quality Standards
+
+### General Principles
+- **Write production-ready code** - no placeholders or pseudo-code
+- **Be thorough** - anticipate needs
+- **Write complete, working code**
+- **Follow existing patterns** in the codebase
+- **No verbose .md progress reports** - update GitHub issues instead
+
+### Error Handling
+- Consistent error responses
+- Proper error mapping (domain → HTTP)
+- Structured logging with request IDs
+- Validate all inputs
+
+### Testing
+- **Frontend**: Component tests (Testing Library), hook tests (mock HTTP)
+- **Backend**: Table-driven unit tests for services, repo tests against Postgres
+- **Integration tests** for handlers
+- No snapshots of complex DOM
+
+## Package Management
+
+### Critical Rule
+- **Always use Yarn, never NPM**
+- Use `yarn install`, `yarn add`, `yarn dev`, etc.
+- Never use `npm install` or `npx`
+
+### Yarn Commands
+```bash
+yarn install              # Install dependencies
+yarn add <package>        # Add dependency
+yarn dev                  # Development server
+yarn build                # Production build
+yarn test                 # Run tests
+yarn lint                 # Lint code
+yarn type-check           # TypeScript check
+```
+
+## Docker & Development
+
+### Docker Compose Patterns
+- Use `docker-compose.yml` for service orchestration
+- Health checks for dependencies (database, Redis)
+- Hot reload for development (Air for Go, Vite for React)
+- Persistent volumes for database data
+
+### Common Services
+- PostgreSQL 16
+- Redis (if needed)
+- MinIO/S3 (file storage)
+- Mailhog (email testing)
+
+## GitHub & Issue Management
+
+### Issue Updates
+- **Always ask before** creating/updating/closing issues
+- Update issues with progress (even if incomplete)
+- Keep updates brief (under 3 sentences)
+- Use checkboxes for progress tracking
+
+### Format
+```
+Progress update:
+- ✅ Completed task
+- 🔄 In progress
+- ⏳ Pending
+- ❌ Blocked: [reason]
+```
+
+## Documentation Standards
+
+### Don't Create
+- ❌ Verbose `.md` progress reports (`*_SUMMARY.md`, `*_REPORT.md`, `*_COMPLETE.md`)
+- ❌ Duplicate documentation files
+- ❌ Progress tracking files
+
+### Do Create
+- ✅ Code comments for complex logic
+- ✅ Architecture decision records (ADRs)
+- ✅ Setup/configuration documentation
+- ✅ API documentation (OpenAPI/Swagger)
+
+## Common Patterns Summary
+
+### Frontend Flow
+```
+Page → Hook (data fetching) → Component (presentation)
+```
+
+### Backend Flow
+```
+Handler (HTTP) → Service (business logic) → Repository (data access)
+```
+
+### Type Flow
+```
+Database → SQLC → Go → OpenAPI → TypeScript
+```
+
+### Development Flow
+1. Define schema in PostgreSQL migration
+2. Generate Go types with SQLC
+3. Implement handlers using SQLC queries
+4. Generate OpenAPI spec
+5. Generate TypeScript types
+6. Use types in frontend
+
+## Red Flags to Avoid
+
+### Frontend
+- ❌ API calls in components
+- ❌ Functions in `useEffect` deps without `useCallback`
+- ❌ Global state in components
+- ❌ Routing logic in components
+- ❌ Manual type definitions instead of generated
+
+### Backend
+- ❌ Database access in handlers
+- ❌ Business logic in repositories
+- ❌ Raw SQL instead of SQLC
+- ❌ Manual type definitions instead of generated
+- ❌ Missing context propagation
+
+### General
+- ❌ Using npm instead of yarn
+- ❌ Placeholder code or TODOs without implementation
+- ❌ Creating verbose progress reports
+- ❌ Not keeping types in sync across stack

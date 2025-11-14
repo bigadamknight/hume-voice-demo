@@ -1,0 +1,6 @@
+hume[microphone]>=0.4.0
+python-dotenv>=1.0.0
+click>=8.1.0
+rich>=13.0.0
+certifi>=2023.0.0
+sounddevice>=0.4.6

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hume-evi-cli"
+version = "0.1.0"
+description = "CLI application for voice conversations with Hume's Empathic Voice Interface"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "hume[microphone]>=0.4.0",
+    "python-dotenv>=1.0.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "certifi>=2023.0.0",
+    "sounddevice>=0.4.6",
+]
+
+[project.scripts]
+hume-cli = "cli:cli"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]  # Line length handled by formatter
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+

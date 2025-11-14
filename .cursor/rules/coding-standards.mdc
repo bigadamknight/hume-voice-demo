@@ -1,0 +1,53 @@
+---
+description: Coding standards and conventions for the project
+glob: "**/*.{go,ts,tsx,py}"
+alwaysApply: false
+---
+
+# Coding Standards
+
+## General Principles
+
+- Write production-ready code - no placeholders or pseudo-code
+- Be thorough and anticipate needs
+- Write complete, working code
+- Follow existing patterns in the codebase
+
+## Go Backend
+
+- Use standard Go project layout: `cmd/`, `internal/`
+- Database migrations in `internal/db/migrations/`
+- API handlers in `internal/api/`
+- Use `github.com/gorilla/mux` for routing
+- JWT authentication via middleware
+- Error handling: return errors, don't panic
+- Use context.Context for cancellation/timeouts
+
+## React Frontend
+
+- TypeScript strict mode
+- Functional components with hooks
+- Use shadcn/ui components
+- Tailwind CSS for styling
+- API calls centralized in `lib/api.ts`
+- Environment variables via `import.meta.env`
+
+## Python CLI
+
+- SQLite for persistence
+- Use Hume Python SDK for WebSocket
+- Simple CLI with argparse
+- Follow PEP 8 style guide
+
+## Package Management
+
+- **Frontend**: Use `yarn`, not `npm`
+- **Backend**: Use `go mod` for dependencies
+- **Python**: Use `requirements.txt` and virtual environments
+
+## Documentation
+
+- Don't create verbose `.md` progress reports
+- Update GitHub issues with brief status (ask first!)
+- Keep code comments focused and useful
+- Document complex logic and architectural decisions

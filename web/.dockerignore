@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.git/
+.gitignore
+*.md
+.env
+.env.example
+.DS_Store
+*.log
+yarn-error.log
+.vscode/
+.idea/
+

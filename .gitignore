@@ -1,0 +1,33 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+*.db
+*.sqlite
+*.sqlite3
+cli/conversations.db
+.DS_Store
+
+# Node.js / Frontend
+node_modules/
+package-lock.json
+yarn-error.log
+dist/
+build/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
