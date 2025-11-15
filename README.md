@@ -1,4 +1,4 @@
-# David Bowie - Hume EVI Voice Conversation Platform
+# Hume Voice Demo - EVI Voice Conversation Platform
 
 A voice conversation platform using Hume's Empathic Voice Interface (EVI), available as both a CLI application and a web application.
 
