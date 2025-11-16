@@ -13,6 +13,7 @@ export function UserAdmin() {
   const [formData, setFormData] = useState<CreateUserRequest>({
     username: '',
     password: '',
+    name: '',
     is_admin: false,
   })
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -43,11 +44,17 @@ export function UserAdmin() {
     setError(null)
 
     try {
-      await users.create(formData)
+      // Send name as undefined if empty
+      const createData: CreateUserRequest = {
+        ...formData,
+        name: formData.name?.trim() || undefined,
+      }
+      await users.create(createData)
       setShowForm(false)
       setFormData({
         username: '',
         password: '',
+        name: '',
         is_admin: false,
       })
       await loadUsers()
@@ -76,6 +83,7 @@ export function UserAdmin() {
     setEditingUserId(user.id)
     setEditData({
       password: '',
+      name: user.name || '',
       is_admin: user.is_admin,
     })
   }
@@ -88,6 +96,9 @@ export function UserAdmin() {
       const updateData: UpdateUserRequest = {}
       if (editData.password && editData.password.trim() !== '') {
         updateData.password = editData.password
+      }
+      if (editData.name !== undefined) {
+        updateData.name = editData.name.trim() || undefined
       }
       if (editData.is_admin !== undefined) {
         updateData.is_admin = editData.is_admin
@@ -174,6 +185,20 @@ export function UserAdmin() {
                 />
               </div>
 
+              <div>
+                <Label htmlFor="name">First Name</Label>
+                <Input
+                  id="name"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Enter first name (optional)"
+                  className="bg-white"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This name will be available as <code className="bg-gray-100 px-1 rounded">{'{{name}}'}</code> in voice prompts
+                </p>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -213,6 +238,7 @@ export function UserAdmin() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Username</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Admin</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Actions</TableHead>
@@ -222,6 +248,7 @@ export function UserAdmin() {
                 {(userList || []).map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.username}</TableCell>
+                    <TableCell>{user.name || '-'}</TableCell>
                     <TableCell>{user.is_admin ? 'Yes' : 'No'}</TableCell>
                     <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
                     <TableCell>
@@ -233,6 +260,13 @@ export function UserAdmin() {
                             value={editData.password || ''}
                             onChange={(e) => setEditData({ ...editData, password: e.target.value })}
                             className="w-48 bg-white"
+                          />
+                          <Input
+                            type="text"
+                            placeholder="First name"
+                            value={editData.name || ''}
+                            onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                            className="w-32 bg-white"
                           />
                           <label className="flex items-center space-x-2">
                             <input

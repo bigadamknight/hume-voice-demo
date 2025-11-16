@@ -43,6 +43,9 @@ func (db *DB) RunMigrations(ctx context.Context) error {
 	-- Add is_admin column if it doesn't exist (for existing databases)
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 	
+	-- Add name column if it doesn't exist (for existing databases)
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+	
 	-- Create index for admin lookups
 	CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
 

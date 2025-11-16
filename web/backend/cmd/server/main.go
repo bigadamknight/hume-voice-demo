@@ -57,7 +57,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Failed to hash admin password:", err)
 		}
-		_, err = database.CreateUser(context.Background(), cfg.AdminUsername, passwordHash, true)
+		_, err = database.CreateUser(context.Background(), cfg.AdminUsername, passwordHash, nil, true)
 		if err != nil {
 			log.Fatal("Failed to create admin user:", err)
 		}
@@ -71,7 +71,7 @@ func main() {
 		}
 		// Update password and ensure is_admin is true
 		isAdmin := true
-		err = database.UpdateUser(context.Background(), adminUser.ID, &passwordHash, &isAdmin)
+		err = database.UpdateUser(context.Background(), adminUser.ID, &passwordHash, nil, &isAdmin)
 		if err != nil {
 			log.Printf("Warning: Failed to update admin user: %v", err)
 		} else {

@@ -2,7 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 type LoginRequest struct {
@@ -84,6 +87,33 @@ func (s *Server) meHandler(w http.ResponseWriter, r *http.Request) {
 	username := getUsername(r)
 	isAdmin := isAdmin(r)
 
+	// Fetch user from database to get name field
+	userIDUUID, err := uuid.Parse(userID)
+	if err == nil {
+		user, err := s.db.GetUserByID(r.Context(), userIDUUID)
+		if err == nil {
+			response := map[string]interface{}{
+				"user_id":  userID,
+				"username": username,
+				"is_admin": isAdmin,
+			}
+			if user.Name != nil && *user.Name != "" {
+				response["name"] = *user.Name
+				log.Printf("meHandler: User %s has name: %s", username, *user.Name)
+			} else {
+				log.Printf("meHandler: User %s has no name (Name is nil or empty)", username)
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		} else {
+			log.Printf("meHandler: Error fetching user from DB: %v", err)
+		}
+	} else {
+		log.Printf("meHandler: Error parsing userID: %v", err)
+	}
+
+	// Fallback if we can't fetch user
+	log.Printf("meHandler: Using fallback response (no name)")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"user_id":  userID,
 		"username": username,

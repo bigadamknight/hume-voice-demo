@@ -3,7 +3,7 @@ import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Select } from './ui/select'
 import { Label } from './ui/label'
-import { voices, Voice } from '../lib/api'
+import { voices, Voice, auth, User } from '../lib/api'
 import { 
   HumeClient,
   EVIWebAudioPlayer,
@@ -30,6 +30,7 @@ export function VoiceChat({ conversationId, onConversationCreated }: VoiceChatPr
   const [voiceList, setVoiceList] = useState<Voice[]>([])
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
   const [loadingVoices, setLoadingVoices] = useState(true)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const socketRef = useRef<any>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const playerRef = useRef<EVIWebAudioPlayer | null>(null)
@@ -40,10 +41,20 @@ export function VoiceChat({ conversationId, onConversationCreated }: VoiceChatPr
 
   useEffect(() => {
     loadVoices()
+    loadUser()
     return () => {
       disconnect()
     }
   }, [])
+
+  const loadUser = async () => {
+    try {
+      const user = await auth.me()
+      setCurrentUser(user)
+    } catch (err) {
+      console.warn('Could not load user for dynamic variables:', err)
+    }
+  }
 
   const loadVoices = async () => {
     try {
@@ -108,6 +119,23 @@ export function VoiceChat({ conversationId, onConversationCreated }: VoiceChatPr
       
       console.log('✅ HumeClient initialized')
 
+      // Fetch user data BEFORE connecting to get variables ready
+      let userVariables: Record<string, string | number | boolean> = {}
+      try {
+        const user = await auth.me()
+        console.log('👤 Pre-connection: User data loaded:', user)
+        userVariables = {
+          username: user.username,
+        }
+        if (user.name && user.name.trim() !== '') {
+          userVariables.name = user.name.trim()
+          console.log('👤 Pre-connection: Name variable prepared:', user.name)
+        }
+        console.log('👤 Pre-connection: Variables ready:', userVariables)
+      } catch (err) {
+        console.error('❌ Pre-connection: Could not load user:', err)
+      }
+      
       // Connect to EVI - pass apiKey to connect() method to add it to WebSocket URL
       // If we have a chat_group_id from a previous session, resume it
       const connectOptions: any = {
@@ -122,6 +150,7 @@ export function VoiceChat({ conversationId, onConversationCreated }: VoiceChatPr
         alert(`Connection lost. Reconnecting... (attempt ${reconnectCountRef.current})\nConversation context will be preserved.`)
       }
       
+      console.log('🔗 Connect options:', connectOptions)
       const socket = await client.empathicVoice.chat.connect(connectOptions)
       console.log('✅ Socket created, waiting for connection...')
 
@@ -134,6 +163,30 @@ export function VoiceChat({ conversationId, onConversationCreated }: VoiceChatPr
       // Handle socket events (following docs pattern)
       socket.on('open', async () => {
         console.log('✅ Socket opened - Hume EVI connected')
+        
+        // Send variables IMMEDIATELY when socket opens (before anything else)
+        // According to Hume docs: "send a session_settings message over the WebSocket within an active Chat session"
+        if (Object.keys(userVariables).length > 0) {
+          console.log('📤 Sending variables immediately on socket open:', userVariables)
+          try {
+            const sessionSettings = {
+              type: 'session_settings',
+              variables: userVariables
+            }
+            if (typeof socket.sendSessionSettings === 'function') {
+              socket.sendSessionSettings(sessionSettings)
+              console.log('✅ Variables sent via sendSessionSettings')
+              console.log('📤 Session settings JSON:', JSON.stringify(sessionSettings, null, 2))
+            } else {
+              console.error('❌ sendSessionSettings not available')
+            }
+          } catch (err) {
+            console.error('❌ Error sending variables:', err)
+          }
+        } else {
+          console.warn('⚠️ No variables to send')
+        }
+        
         setConnected(true)
         setStatus('listening')
         
@@ -470,7 +523,15 @@ function injectContext(socket: any, text: string, type: 'temporary' | 'persisten
   }
   
   console.log('💉 Injecting context:', type, '-', text.substring(0, 50) + '...')
-  socket.sendSessionSettings(sessionSettings)
+  
+  // Try SDK method first, fallback to raw WebSocket send
+  if (typeof socket.sendSessionSettings === 'function') {
+    socket.sendSessionSettings(sessionSettings)
+  } else if (typeof socket.send === 'function') {
+    socket.send(JSON.stringify(sessionSettings))
+  } else {
+    console.error('Cannot send session settings: no send method available')
+  }
 }
 
 /**
@@ -490,8 +551,75 @@ function clearContext(socket: any) {
   }
   
   console.log('🧹 Clearing injected context')
-  socket.sendSessionSettings(sessionSettings)
+  
+  // Try SDK method first, fallback to raw WebSocket send
+  if (typeof socket.sendSessionSettings === 'function') {
+    socket.sendSessionSettings(sessionSettings)
+  } else if (typeof socket.send === 'function') {
+    socket.send(JSON.stringify(sessionSettings))
+  } else {
+    console.error('Cannot send session settings: no send method available')
+  }
+}
+
+/**
+ * Send dynamic variables to the EVI session.
+ * See: https://dev.hume.ai/docs/speech-to-speech-evi/features/dynamic-variables
+ * 
+ * @param socket - The EVI WebSocket connection
+ * @param variables - Object containing variable names and values
+ */
+function sendVariables(socket: any, variables: Record<string, string | number | boolean>) {
+  console.log('🔍 sendVariables called with:', variables)
+  console.log('🔍 Socket object:', socket)
+  console.log('🔍 Socket readyState:', socket?.readyState)
+  console.log('🔍 WebSocket.OPEN constant:', WebSocket.OPEN)
+  
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.warn('⚠️ Cannot send variables: socket not open')
+    console.warn('Socket exists:', !!socket)
+    console.warn('Socket readyState:', socket?.readyState)
+    return
+  }
+  
+  const sessionSettings = {
+    type: 'session_settings',
+    variables
+  }
+  
+  console.log('📤 Sending dynamic variables:', variables)
+  console.log('📤 Full session settings object:', sessionSettings)
+  console.log('📤 Session settings JSON:', JSON.stringify(sessionSettings, null, 2))
+  
+  // Check available methods on socket
+  console.log('🔍 Available socket methods:', Object.keys(socket).filter(key => typeof socket[key] === 'function'))
+  console.log('🔍 Has sendSessionSettings?', typeof socket.sendSessionSettings === 'function')
+  console.log('🔍 Has send?', typeof socket.send === 'function')
+  
+  // Try SDK method first, fallback to raw WebSocket send
+  if (typeof socket.sendSessionSettings === 'function') {
+    console.log('✅ Using sendSessionSettings method')
+    try {
+      socket.sendSessionSettings(sessionSettings)
+      console.log('✅ Successfully called sendSessionSettings')
+    } catch (err) {
+      console.error('❌ Error calling sendSessionSettings:', err)
+    }
+  } else if (typeof socket.send === 'function') {
+    console.log('✅ Using socket.send method')
+    try {
+      const message = JSON.stringify(sessionSettings)
+      console.log('📤 Sending raw WebSocket message:', message)
+      socket.send(message)
+      console.log('✅ Successfully sent via socket.send')
+    } catch (err) {
+      console.error('❌ Error sending via socket.send:', err)
+    }
+  } else {
+    console.error('❌ Cannot send session settings: no send method available')
+    console.error('Socket object:', socket)
+  }
 }
 
 // Export for use in other components if needed
-export { injectContext, clearContext }
+export { injectContext, clearContext, sendVariables }

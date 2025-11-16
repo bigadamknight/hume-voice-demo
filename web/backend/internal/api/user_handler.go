@@ -9,13 +9,15 @@ import (
 )
 
 type CreateUserRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	IsAdmin  bool   `json:"is_admin"`
+	Username string  `json:"username"`
+	Password string  `json:"password"`
+	Name     *string `json:"name,omitempty"`
+	IsAdmin  bool    `json:"is_admin"`
 }
 
 type UpdateUserRequest struct {
 	Password *string `json:"password,omitempty"`
+	Name     *string `json:"name,omitempty"`
 	IsAdmin  *bool   `json:"is_admin,omitempty"`
 }
 
@@ -55,7 +57,7 @@ func (s *Server) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user
-	user, err := s.db.CreateUser(r.Context(), req.Username, passwordHash, req.IsAdmin)
+	user, err := s.db.CreateUser(r.Context(), req.Username, passwordHash, req.Name, req.IsAdmin)
 	if err != nil {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
@@ -102,7 +104,7 @@ func (s *Server) updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update user
-	err = s.db.UpdateUser(r.Context(), id, passwordHash, req.IsAdmin)
+	err = s.db.UpdateUser(r.Context(), id, passwordHash, req.Name, req.IsAdmin)
 	if err != nil {
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
 		return

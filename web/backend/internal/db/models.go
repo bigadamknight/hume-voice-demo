@@ -2,6 +2,9 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +14,7 @@ type User struct {
 	ID           uuid.UUID `json:"id"`
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
+	Name         *string   `json:"name,omitempty"`
 	IsAdmin      bool      `json:"is_admin"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -50,12 +54,20 @@ type Voice struct {
 }
 
 // User methods
-func (db *DB) CreateUser(ctx context.Context, username, passwordHash string, isAdmin bool) (*User, error) {
+func (db *DB) CreateUser(ctx context.Context, username, passwordHash string, name *string, isAdmin bool) (*User, error) {
 	var user User
+	var nameResult sql.NullString
 	err := db.Pool.QueryRow(ctx,
-		`INSERT INTO users (username, password_hash, is_admin) VALUES ($1, $2, $3) RETURNING id, username, password_hash, is_admin, created_at`,
-		username, passwordHash, isAdmin,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
+		`INSERT INTO users (username, password_hash, name, is_admin) VALUES ($1, $2, $3, $4) RETURNING id, username, password_hash, name, is_admin, created_at`,
+		username, passwordHash, name, isAdmin,
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &nameResult, &user.IsAdmin, &user.CreatedAt)
+	if err == nil {
+		if nameResult.Valid && nameResult.String != "" {
+			user.Name = &nameResult.String
+		} else {
+			user.Name = nil
+		}
+	}
 	return &user, err
 }
 
@@ -68,25 +80,41 @@ func (db *DB) CreateUserWithID(ctx context.Context, id uuid.UUID, username, pass
 
 func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
+	var name sql.NullString
 	err := db.Pool.QueryRow(ctx,
-		`SELECT id, username, password_hash, is_admin, created_at FROM users WHERE username = $1`,
+		`SELECT id, username, password_hash, name, is_admin, created_at FROM users WHERE username = $1`,
 		username,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &name, &user.IsAdmin, &user.CreatedAt)
+	if err == nil {
+		if name.Valid && name.String != "" {
+			user.Name = &name.String
+		} else {
+			user.Name = nil
+		}
+	}
 	return &user, err
 }
 
 func (db *DB) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	var user User
+	var name sql.NullString
 	err := db.Pool.QueryRow(ctx,
-		`SELECT id, username, password_hash, is_admin, created_at FROM users WHERE id = $1`,
+		`SELECT id, username, password_hash, name, is_admin, created_at FROM users WHERE id = $1`,
 		id,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &name, &user.IsAdmin, &user.CreatedAt)
+	if err == nil {
+		if name.Valid && name.String != "" {
+			user.Name = &name.String
+		} else {
+			user.Name = nil
+		}
+	}
 	return &user, err
 }
 
 func (db *DB) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := db.Pool.Query(ctx,
-		`SELECT id, username, password_hash, is_admin, created_at FROM users ORDER BY created_at DESC`,
+		`SELECT id, username, password_hash, name, is_admin, created_at FROM users ORDER BY created_at DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -96,9 +124,15 @@ func (db *DB) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
+		var name sql.NullString
+		err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &name, &user.IsAdmin, &user.CreatedAt)
 		if err != nil {
 			return nil, err
+		}
+		if name.Valid && name.String != "" {
+			user.Name = &name.String
+		} else {
+			user.Name = nil
 		}
 		users = append(users, user)
 	}
@@ -121,19 +155,36 @@ func (db *DB) UpdateUserAdmin(ctx context.Context, id uuid.UUID, isAdmin bool) e
 	return err
 }
 
-func (db *DB) UpdateUser(ctx context.Context, id uuid.UUID, passwordHash *string, isAdmin *bool) error {
-	if passwordHash != nil && isAdmin != nil {
-		_, err := db.Pool.Exec(ctx,
-			`UPDATE users SET password_hash = $1, is_admin = $2 WHERE id = $3`,
-			*passwordHash, *isAdmin, id,
-		)
-		return err
-	} else if passwordHash != nil {
-		return db.UpdateUserPassword(ctx, id, *passwordHash)
-	} else if isAdmin != nil {
-		return db.UpdateUserAdmin(ctx, id, *isAdmin)
+func (db *DB) UpdateUser(ctx context.Context, id uuid.UUID, passwordHash *string, name *string, isAdmin *bool) error {
+	// Build dynamic UPDATE query based on what's provided
+	updates := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if passwordHash != nil {
+		updates = append(updates, fmt.Sprintf("password_hash = $%d", argIndex))
+		args = append(args, *passwordHash)
+		argIndex++
 	}
-	return nil
+	if name != nil {
+		updates = append(updates, fmt.Sprintf("name = $%d", argIndex))
+		args = append(args, *name)
+		argIndex++
+	}
+	if isAdmin != nil {
+		updates = append(updates, fmt.Sprintf("is_admin = $%d", argIndex))
+		args = append(args, *isAdmin)
+		argIndex++
+	}
+
+	if len(updates) == 0 {
+		return nil
+	}
+
+	args = append(args, id)
+	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d", strings.Join(updates, ", "), argIndex)
+	_, err := db.Pool.Exec(ctx, query, args...)
+	return err
 }
 
 func (db *DB) DeleteUser(ctx context.Context, id uuid.UUID) error {

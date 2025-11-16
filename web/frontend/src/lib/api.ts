@@ -12,6 +12,7 @@ const api = axios.create({
 export interface User {
   user_id: string
   username: string
+  name?: string
   is_admin: boolean
 }
 
@@ -166,6 +167,7 @@ export const voices = {
 export interface AdminUser {
   id: string
   username: string
+  name?: string
   is_admin: boolean
   created_at: string
 }
@@ -173,11 +175,13 @@ export interface AdminUser {
 export interface CreateUserRequest {
   username: string
   password: string
+  name?: string
   is_admin: boolean
 }
 
 export interface UpdateUserRequest {
   password?: string
+  name?: string
   is_admin?: boolean
 }
 
