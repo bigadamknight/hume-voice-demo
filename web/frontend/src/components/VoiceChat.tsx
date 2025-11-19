@@ -378,21 +378,7 @@ export function VoiceChat({ conversationId, onConversationCreated }: VoiceChatPr
             )}
           </div>
         )}
-        <div className="flex items-center justify-center h-32">
-          <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
-            status === 'listening' ? 'bg-green-100 animate-pulse' :
-            status === 'speaking' ? 'bg-blue-100 animate-pulse' :
-            status === 'processing' ? 'bg-yellow-100 animate-pulse' :
-            'bg-gray-100'
-          }`}>
-            <span className="text-2xl">
-              {status === 'listening' ? '🎤' :
-               status === 'speaking' ? '🔊' :
-               status === 'processing' ? '⏳' :
-               '💬'}
-            </span>
-          </div>
-        </div>
+
         <div className="text-center">
           <p className="text-sm text-muted-foreground capitalize">{status}</p>
           {connected && (
