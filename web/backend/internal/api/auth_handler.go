@@ -58,7 +58,7 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
+		Secure:   s.config.AppEnv == "production",
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   60 * 60 * 24 * 7, // 7 days
 	})
@@ -77,7 +77,7 @@ func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		MaxAge:    -1,
+		MaxAge:   -1,
 	})
 	w.WriteHeader(http.StatusOK)
 }
@@ -120,4 +120,3 @@ func (s *Server) meHandler(w http.ResponseWriter, r *http.Request) {
 		"is_admin": isAdmin,
 	})
 }
-

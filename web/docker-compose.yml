@@ -21,6 +21,7 @@ services:
       dockerfile: Dockerfile.backend
     environment:
       DATABASE_URL: postgresql://hume:hume@db:5432/hume_evi?sslmode=disable
+      APP_ENV: ${APP_ENV:-production}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       HUME_API_KEY: ${HUME_API_KEY}
       HUME_CONFIG_ID: ${HUME_CONFIG_ID}

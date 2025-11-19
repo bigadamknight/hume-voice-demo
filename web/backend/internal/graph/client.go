@@ -74,8 +74,8 @@ func (c *Client) ExecuteRead(ctx context.Context, cypher string, params map[stri
 		var results []map[string]interface{}
 		for _, record := range records {
 			recordMap := make(map[string]interface{})
-			for _, key := range record.Keys {
-				recordMap[key] = record.Values[record.Keys[0]]
+			for i, key := range record.Keys {
+				recordMap[key] = record.Values[i]
 			}
 			results = append(results, recordMap)
 		}
@@ -89,5 +89,3 @@ func (c *Client) ExecuteRead(ctx context.Context, cypher string, params map[stri
 
 	return result.([]map[string]interface{}), nil
 }
-
-
